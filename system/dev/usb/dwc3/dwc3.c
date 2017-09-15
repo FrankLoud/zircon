@@ -193,7 +193,7 @@ static zx_status_t dwc3_start_host_mode(dwc3_t* dwc) {
 
     mtx_unlock(&dwc->lock);
 
-    dwc3_start_xhci(dwc);
+    pdev_device_enable(&dwc->pdev, PDEV_VID_GENERIC, PDEV_PID_GENERIC, PDEV_DID_USB_XHCI, true);
 
     return ZX_OK;
 }
@@ -398,8 +398,7 @@ static zx_status_t dwc3_bind(void* ctx, zx_device_t* parent, void** cookie) {
         return ZX_ERR_NO_MEMORY;
     }
 
-    platform_device_protocol_t pdev;
-    zx_status_t status = device_get_protocol(parent, ZX_PROTOCOL_PLATFORM_DEV, &pdev);
+    zx_status_t status = device_get_protocol(parent, ZX_PROTOCOL_PLATFORM_DEV, &dwc->pdev);
     if (status != ZX_OK) {
         goto fail;
     }
@@ -413,19 +412,20 @@ static zx_status_t dwc3_bind(void* ctx, zx_device_t* parent, void** cookie) {
     }
     dwc->parent = parent;
 
-    status = pdev_map_mmio_buffer(&pdev, MMIO_USB3OTG, ZX_CACHE_POLICY_UNCACHED_DEVICE,
+    status = pdev_map_mmio_buffer(&dwc->pdev, MMIO_USB3OTG, ZX_CACHE_POLICY_UNCACHED_DEVICE,
                                   &dwc->mmio);
     if (status != ZX_OK) {
         dprintf(ERROR, "dwc3_bind: pdev_map_mmio_buffer failed\n");
         goto fail;
     }
 
-    status = pdev_map_interrupt(&pdev, IRQ_USB3, &dwc->irq_handle);
+/*
+    status = pdev_map_interrupt(&dwc->pdev, IRQ_USB3, &dwc->irq_handle);
     if (status != ZX_OK) {
         dprintf(ERROR, "dwc3_bind: pdev_map_interrupt failed\n");
         goto fail;
     }
-
+*/
     status = io_buffer_init(&dwc->event_buffer, EVENT_BUFFER_SIZE, IO_BUFFER_RO | IO_BUFFER_CONTIG);
     if (status != ZX_OK) {
         dprintf(ERROR, "dwc3_bind: io_buffer_init failed\n");

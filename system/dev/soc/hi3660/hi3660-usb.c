@@ -4,6 +4,7 @@
 
 #include <ddk/driver.h>
 #include <ddk/protocol/gpio.h>
+#include <ddk/protocol/platform-devices.h>
 #include <hw/reg.h>
 #include <stdio.h>
 
@@ -72,6 +73,8 @@ zx_status_t hi3660_usb_set_host(hi3660_bus_t* bus, bool host) {
     gpio_write(&gpio, GPIO_HUB_VDD33_EN, host);
     gpio_write(&gpio, GPIO_VBUS_TYPEC, host);
     gpio_write(&gpio, GPIO_USBSW_SW_SEL, host);
+
+    pdev_device_enable(&bus->pdev, PDEV_VID_GENERIC, PDEV_PID_GENERIC, PDEV_DID_USB_XHCI, host);
 
     return ZX_OK;
 }
