@@ -74,6 +74,8 @@ typedef struct {
 
 typedef struct {
     zx_device_t* zxdev;
+    zx_device_t* xhci_dev;
+    zx_device_t* parent;
     usb_dci_interface_t dci_intf;
     pdev_mmio_buffer_t mmio;
 
@@ -147,6 +149,10 @@ void dwc3_ep0_xfer_complete(dwc3_t* dwc, unsigned ep_num);
 
 // Events
 void dwc3_events_start(dwc3_t* dwc);
+
+// XHCI
+zx_status_t dwc3_start_xhci(dwc3_t* dwc);
+zx_status_t dwc3_stop_xhci(dwc3_t* dwc);
 
 // Utils
 void dwc3_wait_bits(volatile uint32_t* ptr, uint32_t bits, uint32_t expected);

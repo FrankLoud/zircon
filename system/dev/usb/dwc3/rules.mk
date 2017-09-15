@@ -13,7 +13,8 @@ MODULE_SRCS += \
     $(LOCAL_DIR)/dwc3-commands.c \
     $(LOCAL_DIR)/dwc3-endpoints.c \
     $(LOCAL_DIR)/dwc3-ep0.c \
-    $(LOCAL_DIR)/dwc3-events.c
+    $(LOCAL_DIR)/dwc3-events.c \
+    $(LOCAL_DIR)/dwc3-xhci.c
 
 MODULE_STATIC_LIBS := system/ulib/ddk system/ulib/sync system/ulib/pretty
 
