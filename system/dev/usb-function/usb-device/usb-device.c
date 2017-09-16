@@ -15,6 +15,7 @@
 #include <ddk/driver.h>
 #include <ddk/protocol/usb-dci.h>
 #include <ddk/protocol/usb-function.h>
+#include <ddk/protocol/usb-mode-switch.h>
 #include <zircon/listnode.h>
 #include <zircon/device/usb-device.h>
 #include <zircon/hw/usb-cdc.h>
@@ -638,6 +639,36 @@ static zx_status_t usb_dev_clear_functions(usb_device_t* dev) {
     return ZX_OK;
 }
 
+static zx_status_t usb_dev_get_mode(usb_device_t* dev, void* out_buf, size_t out_len,
+                                    size_t* out_actual) {
+    if (out_len < sizeof(usb_mode_t)) {
+        return ZX_ERR_INVALID_ARGS;
+    }
+
+    usb_mode_switch_protocol_t ums;
+    zx_status_t status = device_get_protocol(dev->dci_dev, ZX_PROTOCOL_USB_MODE_SWITCH, &ums);
+    if (status != ZX_OK) {
+        return status;
+    }
+
+    *((usb_mode_t *)out_buf) = usb_mode_switch_get_mode(&ums);
+    *out_actual = sizeof(usb_mode_t);
+    return ZX_OK;
+}
+
+static zx_status_t usb_dev_set_mode(usb_device_t* dev, const void* in_buf, size_t in_len) {
+    if (in_len < sizeof(usb_mode_t)) {
+        return ZX_ERR_INVALID_ARGS;
+    }
+
+    usb_mode_switch_protocol_t ums;
+    zx_status_t status = device_get_protocol(dev->dci_dev, ZX_PROTOCOL_USB_MODE_SWITCH, &ums);
+    if (status != ZX_OK) {
+        return status;
+    }
+    return usb_mode_switch_set_mode(&ums, *((usb_mode_t *)in_buf));
+}
+
 static zx_status_t usb_dev_ioctl(void* ctx, uint32_t op, const void* in_buf, size_t in_len,
                                  void* out_buf, size_t out_len, size_t* out_actual) {
     dprintf(TRACE, "usb_dev_ioctl %x\n", op);
@@ -654,6 +685,10 @@ static zx_status_t usb_dev_ioctl(void* ctx, uint32_t op, const void* in_buf, siz
         return usb_dev_bind_functions(dev);
     case IOCTL_USB_DEVICE_CLEAR_FUNCTIONS:
         return usb_dev_clear_functions(dev);
+    case IOCTL_USB_DEVICE_GET_MODE:
+        return usb_dev_get_mode(dev, out_buf, out_len, out_actual);
+    case IOCTL_USB_DEVICE_SET_MODE:
+        return usb_dev_set_mode(dev, in_buf, in_len);
     default:
         return ZX_ERR_NOT_SUPPORTED;
     }
