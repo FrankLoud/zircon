@@ -157,14 +157,22 @@ static void xhci_unbind(void* ctx) {
     xhci_t* xhci = ctx;
     dprintf(TRACE, "xhci_unbind\n");
 
+    // stop the controller and our device thread
+    xhci_stop(xhci);
+
+    // stop our interrupt threads
+    for (uint32_t i = 0; i < xhci->num_interrupts; i++) {
+        zx_interrupt_signal(xhci->irq_handles[i]);
+        thrd_join(xhci->completer_threads[i], NULL);
+        zx_handle_close(xhci->irq_handles[i]);
+    }
+
     device_remove(xhci->zxdev);
 }
 
 static void xhci_release(void* ctx) {
-     xhci_t* xhci = ctx;
-
-   // FIXME(voydanoff) - there is a lot more work to do here
-    free(xhci);
+    xhci_t* xhci = ctx;
+    xhci_free(xhci);
 }
 
 static zx_protocol_device_t xhci_device_proto = {
@@ -175,8 +183,8 @@ static zx_protocol_device_t xhci_device_proto = {
 };
 
 typedef struct completer {
-    uint32_t interrupter;
     xhci_t *xhci;
+    uint32_t interrupter;
     uint32_t priority;
 } completer_t;
 
@@ -250,9 +258,8 @@ static int xhci_start_thread(void* arg) {
     }
 
     for (uint32_t i = 0; i < xhci->num_interrupts; i++) {
-        thrd_t thread;
-        thrd_create_with_name(&thread, completer_thread, completers[i], "completer_thread");
-        thrd_detach(thread);
+        thrd_create_with_name(&xhci->completer_threads[i], completer_thread, completers[i],
+                              "completer_thread");
     }
 
     dprintf(TRACE, "xhci_start_thread done\n");

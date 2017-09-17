@@ -112,9 +112,12 @@ struct xhci {
     // supported by hardware. The actual number of interrupts configured
     // will not exceed this, and is stored in num_interrupts.
 #define INTERRUPTER_COUNT 2
+    thrd_t completer_threads[INTERRUPTER_COUNT];
     zx_handle_t irq_handles[INTERRUPTER_COUNT];
+    // actual number of interrupts we are using
+    uint32_t num_interrupts;
+
     zx_handle_t mmio_handle;
-    thrd_t irq_thread;
 
     // used by the start thread
     zx_device_t* parent;
@@ -148,7 +151,6 @@ struct xhci {
 
     size_t page_size;
     size_t max_slots;
-    uint32_t num_interrupts;
     size_t context_size;
     // true if controller supports large ESIT payloads
     bool large_esit;
@@ -212,6 +214,9 @@ void xhci_post_command(xhci_t* xhci, uint32_t command, uint64_t ptr, uint32_t co
                        xhci_command_context_t* context);
 void xhci_wait_bits(volatile uint32_t* ptr, uint32_t bits, uint32_t expected);
 void xhci_wait_bits64(volatile uint64_t* ptr, uint64_t bits, uint64_t expected);
+
+void xhci_stop(xhci_t* xhci);
+void xhci_free(xhci_t* xhci);
 
 // returns monotonically increasing frame count
 uint64_t xhci_get_current_frame(xhci_t* xhci);
