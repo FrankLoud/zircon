@@ -191,6 +191,12 @@ static int dwc3_irq_thread(void* arg) {
             dprintf(ERROR, "dwc3_irq_thread: zx_interrupt_wait returned %d\n", status);
             break;
         }
+        mtx_lock(&dwc->irq_thread_lock);
+        bool stop = dwc->irq_thread_stop;
+        mtx_unlock(&dwc->irq_thread_lock);
+        if (stop) {
+            break;
+        }
 
         // read number of new bytes in the event buffer
         uint32_t event_count;
@@ -233,4 +239,14 @@ void dwc3_events_start(dwc3_t* dwc) {
     DWC3_WRITE32(mmio + DEVTEN, event_mask);
 
     thrd_create_with_name(&dwc->irq_thread, dwc3_irq_thread, dwc, "dwc3_irq_thread");
+}
+
+void dwc3_events_stop(dwc3_t* dwc) {
+    mtx_lock(&dwc->irq_thread_lock);
+    dwc->irq_thread_stop = true;
+    mtx_unlock(&dwc->irq_thread_lock);
+
+    zx_interrupt_signal(dwc->irq_handle);
+    thrd_join(dwc->irq_thread, NULL);
+    dwc->irq_thread_stop = false;
 }

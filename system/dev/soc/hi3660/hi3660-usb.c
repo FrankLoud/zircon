@@ -59,7 +59,11 @@ zx_status_t hi3360_usb_init(hi3660_bus_t* bus) {
     return ZX_OK;
 }
 
-zx_status_t hi3660_usb_set_host(hi3660_bus_t* bus, bool host) {
+zx_status_t hi3660_usb_set_mode(hi3660_bus_t* bus, usb_mode_t mode) {
+    if (mode == bus->usb_mode) {
+        return ZX_OK;
+    }
+
     gpio_protocol_t gpio;
     if (pdev_get_protocol(&bus->pdev, ZX_PROTOCOL_GPIO, &gpio) != ZX_OK) {
         printf("hi3360_usb_init: could not get GPIO protocol!\n");
@@ -70,11 +74,13 @@ zx_status_t hi3660_usb_set_host(hi3660_bus_t* bus, bool host) {
     gpio_config(&gpio, GPIO_VBUS_TYPEC, GPIO_DIR_OUT);
     gpio_config(&gpio, GPIO_USBSW_SW_SEL, GPIO_DIR_OUT);
 
-    gpio_write(&gpio, GPIO_HUB_VDD33_EN, host);
-    gpio_write(&gpio, GPIO_VBUS_TYPEC, host);
-    gpio_write(&gpio, GPIO_USBSW_SW_SEL, host);
+    gpio_write(&gpio, GPIO_HUB_VDD33_EN, mode == USB_MODE_HOST);
+    gpio_write(&gpio, GPIO_VBUS_TYPEC, mode == USB_MODE_HOST);
+    gpio_write(&gpio, GPIO_USBSW_SW_SEL, mode == USB_MODE_HOST);
 
-    pdev_device_enable(&bus->pdev, PDEV_VID_GENERIC, PDEV_PID_GENERIC, PDEV_DID_USB_XHCI, host);
+    // add or remove XHCI device
+    pdev_device_enable(&bus->pdev, PDEV_VID_GENERIC, PDEV_PID_GENERIC, PDEV_DID_USB_XHCI,
+                       mode == USB_MODE_HOST);
 
     return ZX_OK;
 }

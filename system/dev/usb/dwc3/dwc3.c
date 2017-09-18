@@ -6,6 +6,7 @@
 #include <ddk/debug.h>
 #include <ddk/protocol/platform-devices.h>
 #include <ddk/protocol/usb-function.h>
+#include <ddk/protocol/usb-mode-switch.h>
 #include <hw/reg.h>
 #include <pretty/hexdump.h>
 
@@ -67,6 +68,81 @@ void dwc3_print_status(dwc3_t* dwc) {
     dprintf(TRACE, "\n");
 }
 
+/*
+static void dwc3_config(dwc3_t* dwc, usb_mode_t mode) {
+    volatile void* mmio = dwc3_mmio(dwc);
+    uint32_t temp;
+
+    mtx_lock(&dwc->lock);
+
+    if (mode == USB_MODE_NONE) {
+        // initiate a disconnect
+        temp = DWC3_READ32(mmio + DCTL);
+        temp &= ~DCTL_RUN_STOP;
+        DWC3_WRITE32(mmio + DCTL, temp);
+        dwc3_wait_bits(mmio + DSTS, DSTS_DEVCTRLHLT, DSTS_DEVCTRLHLT);
+
+        mtx_unlock(&dwc->lock);
+        return; 
+    } else {
+        temp = DWC3_READ32(mmio + DCTL);
+        temp &= ~DCTL_RUN_STOP;
+        temp |= DCTL_CSFTRST;
+        DWC3_WRITE32(mmio + DCTL, temp);
+        dwc3_wait_bits(mmio + DCTL, DCTL_CSFTRST, 0);
+    }
+
+    // configure and enable PHYs
+    // TODO(voydanoff) how much of this is necessary for host mode?
+    temp = DWC3_READ32(mmio + GUSB2PHYCFG(0));
+    temp &= ~(GUSB2PHYCFG_USBTRDTIM_MASK | GUSB2PHYCFG_SUSPENDUSB20);
+    temp |= GUSB2PHYCFG_USBTRDTIM(9);
+//    DWC3_WRITE32(mmio + GUSB2PHYCFG(0), temp);
+    DWC3_WRITE32(mmio + GUSB2PHYCFG(0), 0x40102440);
+
+    temp = DWC3_READ32(mmio + GUSB3PIPECTL(0));
+    temp &= ~(GUSB3PIPECTL_DELAYP1TRANS | GUSB3PIPECTL_SUSPENDENABLE);
+    temp |= GUSB3PIPECTL_LFPSFILTER | GUSB3PIPECTL_SS_TX_DE_EMPHASIS(1);
+//    DWC3_WRITE32(mmio + GUSB3PIPECTL(0), temp);
+    DWC3_WRITE32(mmio + GUSB3PIPECTL(0), 0x10E0002);
+
+    if (mode == USB_MODE_DEVICE) {
+        // configure for device mode
+        DWC3_WRITE32(mmio + GCTL, GCTL_U2EXIT_LFPS | GCTL_PRTCAPDIR_DEVICE | GCTL_U2RSTECN |
+                                  GCTL_PWRDNSCALE(2));
+        temp = DWC3_READ32(mmio + DCFG);
+        uint32_t nump = 16;
+        uint32_t max_speed = DCFG_DEVSPD_SUPER;
+        temp &= ~DWC3_MASK(DCFG_NUMP_START, DCFG_NUMP_BITS);
+        temp |= nump << DCFG_NUMP_START;
+        temp &= ~DWC3_MASK(DCFG_DEVSPD_START, DCFG_DEVSPD_BITS);
+        temp |= max_speed << DCFG_DEVSPD_START;
+        temp &= ~DWC3_MASK(DCFG_DEVADDR_START, DCFG_DEVADDR_BITS);  // clear address
+        DWC3_WRITE32(mmio + DCFG, temp);
+
+    } else {
+        // configure for host mode
+        DWC3_WRITE32(mmio + GCTL, GCTL_U2EXIT_LFPS | GCTL_PRTCAPDIR_HOST | GCTL_U2RSTECN |
+                                  GCTL_PWRDNSCALE(2));
+     
+        temp = DWC3_READ32(mmio + OCFG);
+        temp |= (OCFG_DISPRTPWRCUTOFF | OCFG_OTGSFTRSTMSK);
+        temp &= ~(OCFG_HNPCAP | OCFG_SRPCAP);
+        DWC3_WRITE32(mmio + OCFG, temp);
+     
+        temp = DWC3_READ32(mmio + OCTL);
+        temp |= OCTL_PRTPWRCTL;
+        temp &= ~OCTL_PERIMODE;
+        DWC3_WRITE32(mmio + OCTL, temp);
+    }
+
+    // start the controller
+    DWC3_WRITE32(mmio + DCTL, DCTL_RUN_STOP);
+
+    mtx_unlock(&dwc->lock);
+}
+*/
+
 static zx_status_t dwc3_start_peripheral_mode(dwc3_t* dwc) {
     volatile void* mmio = dwc3_mmio(dwc);
     uint32_t temp;
@@ -92,38 +168,9 @@ static zx_status_t dwc3_start_peripheral_mode(dwc3_t* dwc) {
 //    DWC3_WRITE32(mmio + GUSB3PIPECTL(0), temp);
     DWC3_WRITE32(mmio + GUSB3PIPECTL(0), 0x10E0002);
 
-#if 0
     // configure for device mode
     DWC3_WRITE32(mmio + GCTL, GCTL_U2EXIT_LFPS | GCTL_PRTCAPDIR_DEVICE | GCTL_U2RSTECN |
                               GCTL_PWRDNSCALE(2));
-#else
-    // configure for host mode
-    DWC3_WRITE32(mmio + GCTL, GCTL_U2EXIT_LFPS | GCTL_PRTCAPDIR_HOST | GCTL_U2RSTECN |
-                              GCTL_PWRDNSCALE(2));
- 
-    temp = DWC3_READ32(mmio + OCFG);
-    temp |= (OCFG_DISPRTPWRCUTOFF | OCFG_OTGSFTRSTMSK);
-    temp &= ~(OCFG_HNPCAP | OCFG_SRPCAP);
-    DWC3_WRITE32(mmio + OCFG, temp);
- 
-    temp = DWC3_READ32(mmio + OCTL);
-    temp |= OCTL_PRTPWRCTL;
-    temp &= ~OCTL_PERIMODE;
-    DWC3_WRITE32(mmio + OCTL, temp);
- 
-printf("OCFG: 0x%X\n", DWC3_READ32(mmio + OCFG));
-printf("OCTL: 0x%X\n", DWC3_READ32(mmio + OCTL));
-printf("OEVT: 0x%X\n", DWC3_READ32(mmio + OEVT));
-printf("OEVTEN: 0x%X\n", DWC3_READ32(mmio + OEVTEN));
-printf("OSTS: 0x%X\n", DWC3_READ32(mmio + OSTS));
-printf("BCFG: 0x%X\n", DWC3_READ32(mmio + BCFG));
-printf("BCEVT: 0x%X\n", DWC3_READ32(mmio + BCEVT));
-printf("BCEVTEN: 0x%X\n", DWC3_READ32(mmio + BCEVTEN));
-
-
-                          
-#endif
-
     temp = DWC3_READ32(mmio + DCFG);
     uint32_t nump = 16;
     uint32_t max_speed = DCFG_DEVSPD_SUPER;
@@ -178,6 +225,35 @@ static zx_status_t dwc3_start_host_mode(dwc3_t* dwc) {
     DWC3_WRITE32(mmio + GCTL, GCTL_U2EXIT_LFPS | GCTL_PRTCAPDIR_HOST | GCTL_U2RSTECN |
                               GCTL_PWRDNSCALE(2));
 
+##if 0
+    // configure for host mode
+    DWC3_WRITE32(mmio + GCTL, GCTL_U2EXIT_LFPS | GCTL_PRTCAPDIR_HOST | GCTL_U2RSTECN |
+                              GCTL_PWRDNSCALE(2));
+ 
+    temp = DWC3_READ32(mmio + OCFG);
+    temp |= (OCFG_DISPRTPWRCUTOFF | OCFG_OTGSFTRSTMSK);
+    temp &= ~(OCFG_HNPCAP | OCFG_SRPCAP);
+    DWC3_WRITE32(mmio + OCFG, temp);
+ 
+    temp = DWC3_READ32(mmio + OCTL);
+    temp |= OCTL_PRTPWRCTL;
+    temp &= ~OCTL_PERIMODE;
+    DWC3_WRITE32(mmio + OCTL, temp);
+ 
+printf("OCFG: 0x%X\n", DWC3_READ32(mmio + OCFG));
+printf("OCTL: 0x%X\n", DWC3_READ32(mmio + OCTL));
+printf("OEVT: 0x%X\n", DWC3_READ32(mmio + OEVT));
+printf("OEVTEN: 0x%X\n", DWC3_READ32(mmio + OEVTEN));
+printf("OSTS: 0x%X\n", DWC3_READ32(mmio + OSTS));
+printf("BCFG: 0x%X\n", DWC3_READ32(mmio + BCFG));
+printf("BCEVT: 0x%X\n", DWC3_READ32(mmio + BCEVT));
+printf("BCEVTEN: 0x%X\n", DWC3_READ32(mmio + BCEVTEN));
+
+
+                          
+#endif
+
+
     temp = DWC3_READ32(mmio + DCFG);
     uint32_t nump = 16;
     uint32_t max_speed = DCFG_DEVSPD_SUPER;
@@ -193,11 +269,16 @@ static zx_status_t dwc3_start_host_mode(dwc3_t* dwc) {
 
     mtx_unlock(&dwc->lock);
 
-    pdev_device_enable(&dwc->pdev, PDEV_VID_GENERIC, PDEV_PID_GENERIC, PDEV_DID_USB_XHCI, true);
-
     return ZX_OK;
 }
 
+static void dwc3_config(dwc3_t* dwc, usb_mode_t mode) {
+    if (mode == USB_MODE_DEVICE) {
+        dwc3_start_peripheral_mode(dwc);
+    } else if (mode == USB_MODE_DEVICE) {
+        dwc3_start_host_mode(dwc);
+    }
+}
 
 void dwc3_usb_reset(dwc3_t* dwc) {
     dprintf(INFO, "dwc3_usb_reset\n");
@@ -343,12 +424,108 @@ usb_dci_protocol_ops_t dwc_dci_protocol = {
     .ep_clear_stall = dwc3_clear_stall,
 };
 
+static usb_mode_t dwc3_get_mode(void* ctx) {
+    dwc3_t* dwc = ctx;
+    return dwc->mode;
+}
+
+static zx_status_t dwc3_set_mode(void* ctx, usb_mode_t mode) {
+printf("dwc3_set_mode %d\n", mode);
+    dwc3_t* dwc = ctx;
+    zx_status_t status = ZX_OK;
+
+    if (mode == USB_MODE_OTG) {
+        return ZX_ERR_NOT_SUPPORTED;
+    }
+    if (dwc->mode == mode) {
+        return ZX_OK;
+    }
+
+    // Shutdown if we are in device mode
+    if (dwc->mode == USB_MODE_DEVICE) {
+printf("shutdown device mode\n");
+        dwc3_events_stop(dwc);
+        zx_handle_close(dwc->irq_handle);
+        dwc->irq_handle = ZX_HANDLE_INVALID;
+        dwc3_disconnected(dwc);
+    }
+
+    if (mode == USB_MODE_HOST) {
+printf("dwc3_config USB_MODE_HOST\n");
+        dwc3_config(dwc, USB_MODE_HOST);    
+    }
+
+    // Tell platform bus to switch mode, if applicable
+    usb_mode_switch_protocol_t ums;
+    bool have_pdev_protocol = (pdev_get_protocol(&dwc->pdev, ZX_PROTOCOL_USB_MODE_SWITCH, &ums)
+                               == ZX_OK);
+    if (have_pdev_protocol) {
+        status = usb_mode_switch_set_mode(&ums, mode);
+        if (status != ZX_OK) {
+            goto fail;
+        }
+    }
+
+    if (mode == USB_MODE_DEVICE) {
+printf("start USB_MODE_DEVICE\n");
+        status = pdev_map_interrupt(&dwc->pdev, IRQ_USB3, &dwc->irq_handle);
+        if (status != ZX_OK) {
+            dprintf(ERROR, "dwc3_set_mode: pdev_map_interrupt failed\n");
+            goto fail;
+        }
+
+        dwc3_config(dwc, USB_MODE_DEVICE);
+
+        mtx_lock(&dwc->lock);
+        dwc3_events_start(dwc);
+        mtx_unlock(&dwc->lock);
+
+        dwc3_ep0_start(dwc);
+    }
+
+    dwc->mode = mode;
+    return ZX_OK;
+
+fail:
+    if (have_pdev_protocol) {
+        usb_mode_switch_set_mode(&ums, USB_MODE_NONE);
+    }
+    dwc3_config(dwc, USB_MODE_NONE);    
+    dwc->mode = USB_MODE_NONE;
+
+    return status;
+}
+
+usb_mode_switch_protocol_ops_t dwc_ums_protocol = {
+    .get_mode = dwc3_get_mode,
+    .set_mode = dwc3_set_mode,
+};
+
 static void dwc3_unbind(void* ctx) {
     dwc3_t* dwc = ctx;
 
     zx_interrupt_signal(dwc->irq_handle);
     thrd_join(dwc->irq_thread, NULL);
     device_remove(dwc->zxdev);
+}
+
+static zx_status_t dwc3_get_protocol(void* ctx, uint32_t proto_id, void* out) {
+    switch (proto_id) {
+    case ZX_PROTOCOL_USB_DCI: {
+        usb_dci_protocol_t* proto = out;
+        proto->ops = &dwc_dci_protocol;
+        proto->ctx = ctx;
+        return ZX_OK;
+    }
+    case ZX_PROTOCOL_USB_MODE_SWITCH: {
+        usb_mode_switch_protocol_t* proto = out;
+        proto->ops = &dwc_ums_protocol;
+        proto->ctx = ctx;
+        return ZX_OK;
+    }
+    default:
+        return ZX_ERR_NOT_SUPPORTED;
+    }
 }
 
 static void dwc3_iotxn_queue(void* ctx, iotxn_t* txn) {
@@ -386,6 +563,7 @@ static void dwc3_release(void* ctx) {
 
 static zx_protocol_device_t dwc3_device_proto = {
     .version = DEVICE_OPS_VERSION,
+    .get_protocol = dwc3_get_protocol,
     .iotxn_queue = dwc3_iotxn_queue,
     .release = dwc3_release,
 };
@@ -404,6 +582,8 @@ static zx_status_t dwc3_bind(void* ctx, zx_device_t* parent, void** cookie) {
     }
 
     mtx_init(&dwc->lock, mtx_plain);
+    mtx_init(&dwc->irq_thread_lock, mtx_plain);
+
     for (unsigned i = 0; i < countof(dwc->eps); i++) {
         dwc3_endpoint_t* ep = &dwc->eps[i];
         ep->ep_num = i;
@@ -411,6 +591,7 @@ static zx_status_t dwc3_bind(void* ctx, zx_device_t* parent, void** cookie) {
         list_initialize(&ep->queued_txns);
     }
     dwc->parent = parent;
+    dwc->mode = USB_MODE_NONE;
 
     status = pdev_map_mmio_buffer(&dwc->pdev, MMIO_USB3OTG, ZX_CACHE_POLICY_UNCACHED_DEVICE,
                                   &dwc->mmio);
@@ -419,13 +600,6 @@ static zx_status_t dwc3_bind(void* ctx, zx_device_t* parent, void** cookie) {
         goto fail;
     }
 
-/*
-    status = pdev_map_interrupt(&dwc->pdev, IRQ_USB3, &dwc->irq_handle);
-    if (status != ZX_OK) {
-        dprintf(ERROR, "dwc3_bind: pdev_map_interrupt failed\n");
-        goto fail;
-    }
-*/
     status = io_buffer_init(&dwc->event_buffer, EVENT_BUFFER_SIZE, IO_BUFFER_RO | IO_BUFFER_CONTIG);
     if (status != ZX_OK) {
         dprintf(ERROR, "dwc3_bind: io_buffer_init failed\n");
@@ -458,8 +632,6 @@ static zx_status_t dwc3_bind(void* ctx, zx_device_t* parent, void** cookie) {
     if (status != ZX_OK) {
         goto fail;
     }
-
-    dwc3_start_host_mode(dwc);
 
     return ZX_OK;
 

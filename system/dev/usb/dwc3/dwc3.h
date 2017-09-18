@@ -8,6 +8,7 @@
 #include <ddk/io-buffer.h>
 #include <ddk/protocol/platform-device.h>
 #include <ddk/protocol/usb-dci.h>
+#include <zircon/device/usb-device.h>
 #include <zircon/listnode.h>
 #include <zircon/types.h>
 #include <zircon/hw/usb.h>
@@ -80,10 +81,14 @@ typedef struct {
     usb_dci_interface_t dci_intf;
     pdev_mmio_buffer_t mmio;
 
+    usb_mode_t mode;
+
     // event stuff
     io_buffer_t event_buffer;
     zx_handle_t irq_handle;
     thrd_t irq_thread;
+    mtx_t irq_thread_lock;
+    bool irq_thread_stop;
 
     dwc3_endpoint_t eps[DWC3_MAX_EPS];
 
@@ -150,6 +155,7 @@ void dwc3_ep0_xfer_complete(dwc3_t* dwc, unsigned ep_num);
 
 // Events
 void dwc3_events_start(dwc3_t* dwc);
+void dwc3_events_stop(dwc3_t* dwc);
 
 // Utils
 void dwc3_wait_bits(volatile uint32_t* ptr, uint32_t bits, uint32_t expected);
